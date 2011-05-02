@@ -1,0 +1,4 @@
+name = Meta Description
+description = Add meta descriptions to URI's
+core = 6.x
+version = "6.x-0.1"

@@ -1,0 +1,94 @@
+<?php
+
+function metadescription_init() {
+  $description = metadescription_get_description();
+  if($description) {
+    drupal_set_html_head('<meta name="Description" content="' . $description . '">');
+  }
+}
+
+function metadescription_get_description() {
+  $uri = request_uri();
+
+  // Search for exact match
+  $desc = db_result(db_query("SELECT description FROM {metadescription} WHERE uri = '%s'", array(':uri' => $uri)));
+  if(!$desc) {
+
+    // Search for pattern
+    $search_pattern = TRUE;
+    $search_fallback = TRUE;
+    $uri_parts = metadescription_get_uri_parts($uri);
+    $position = count($uri_parts) - 1;
+    while($search_pattern && $position > 0) {
+      $uri_parts[$position] = '%';
+      $uri = metadescription_build_uri($uri_parts);
+      $desc = db_result(db_query("SELECT description FROM {metadescription} WHERE uri = '%s'", array(':uri' => $uri)));
+      if($desc) {
+        $search_pattern = $search_fallback = FALSE;
+      }
+      $position -= 1;
+    }
+
+    // Search for fallback
+    $uri_parts = metadescription_get_uri_parts($uri);
+    while($search_fallback && count($uri_parts) > 0) {
+      unset($uri_parts[count($uri_parts) - 1]);
+      $uri = metadescription_build_uri($uri_parts);
+      $uri .= '/*';
+      $desc = db_result(db_query("SELECT description FROM {metadescription} WHERE uri = '%s'", array(':uri' => $uri)));
+      if($desc) {
+        $search_fallback = FALSE;
+      }
+    }
+  }
+
+  if(!$desc) {
+    return FALSE;
+  }
+
+  $values = array();
+  $start = 0;
+  while($pos = strpos($desc, '[', $start)) {
+    $pos += 1;
+    $end = strpos($desc, ']', $start);
+    $value = substr($desc, $pos, $end - $pos);
+    $values[] = $value;
+    $start = $end + 1;
+  }
+
+  foreach($values as $value) {
+    $placeholder = '[' . $value . ']';
+    if(arg($value)) {
+      $desc = str_replace($placeholder, arg($value), $desc);
+    } else {
+      $desc = str_replace($placeholder, NULL, $desc);
+      // drupal_set_message('Meta description: There is an error with your placeholders', 'warning');
+    }
+  }
+  return $desc;
+}
+
+function metadescription_get_uri_parts($uri) {
+  $uri_parts = explode('/', trim($uri, '/'));
+  return $uri_parts;
+}
+
+function metadescription_build_uri($uri_parts) {
+  $uri = '';
+  foreach($uri_parts as $part) {
+    $uri .= '/' . $part;
+  }
+  return $uri;
+}
+
+function metadescription_menu() {
+  $items = array();
+  $items['admin/settings/metadescription'] = array(
+    'title' => 'Meta Description',
+    'page callback' => 'metadescription_admin_page',
+    'access arguments' => array('administer content types'),
+    'file' => 'metadescription.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  return $items;
+}
